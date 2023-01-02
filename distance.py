@@ -1,11 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 import threading
 from time import sleep, perf_counter_ns
 from gpiozero import DistanceSensor
+from gpiozero.pins.pigpio import PiGPIOFactory
 from reporting import DeviceReporter
 from bandshooter import BandShooter
 
-REPORT_FREQUENCY = 10000
+REPORT_FREQUENCY = 2000
 DISTANCE_SENSOR_DEVICE_ID = "63b027a5f4f9ead7f48d3bec"
 SHOOTER_DEVICE_ID = "63b0565c412b132160b22368"
 
@@ -17,16 +18,19 @@ shooter_device.connect()
 
 # { device: DeviceReporter, states: [] }
 reports = [] 
+my_factory = PiGPIOFactory()
 
 # Set up ultrasonic sensor
 ## https://www.woolseyworkshop.com/2020/05/01/interfacing-ultrasonic-distance-sensors-with-a-raspberry-pi/
-dist_sensor = DistanceSensor(echo=23, trigger=24, max_distance=4)
+dist_sensor = DistanceSensor(echo=23, trigger=24, max_distance=4, pin_factory=my_factory)
 
 # Set up rubber band shooter
 shooter = BandShooter()
 
-# Mutex lock
-lock = threading.Lock()
+# Mutex locks
+lock = threading.Lock() # reporting queue
+shooting_cv = threading.Condition()
+
 
 def reporting():
 
@@ -49,22 +53,10 @@ def reporting():
         
         sleep(1)
 
-def read_sensor():
-
-    last_report = None
-    distance_mm_raw = None
-    distance_buffer = []
-
-    # Monitor sensor
+def shooting():
     while True:
-        start_iteration = perf_counter_ns() / 1000000
-
-        # Get reading and save to buffer
-        distance_mm_raw = dist_sensor.distance * 1000
-        distance_buffer.append(distance_mm_raw)
-
-        # Shoot if really close
-        if distance_mm_raw < 1000:
+        with shooting_cv:
+            shooting_cv.wait()
             shooter.shoot()
             print(f"Firing...")
             # wait for lock on reports
@@ -75,9 +67,30 @@ def read_sensor():
                         "data": {
                             "shoot": True
                         },
-                        "time": start_iteration
+                        "time": perf_counter_ns() / 1000000
                     }]
                 })
+        sleep(5)
+
+def sensing():
+
+    last_report = None
+    distance_mm_raw = None
+    distance_buffer = []
+
+    # Monitor sensor
+    while True:
+        start_iteration = perf_counter_ns() / 1000000
+
+        # Get reading and save to buffer
+        distance_mm_raw = int(dist_sensor.distance * 1000)
+        distance_buffer.append(distance_mm_raw)
+
+        # Shoot if really close
+        if distance_mm_raw < 1000:
+            with shooting_cv:
+                shooting_cv.notify_all()
+
 
         # If time to report, take average of buffer and send
         duration = start_iteration - last_report if last_report != None else REPORT_FREQUENCY
@@ -86,6 +99,8 @@ def read_sensor():
             s = sum(distance_buffer)
             l = len(distance_buffer)
             m = s / l
+            print(distance_buffer)
+            print("\n")
             print(f"Reporting state: {m}mm from {l} readings over {duration/1000} seconds" )
             #distance_device.report("distance",sum(distance_buffer) / len(distance_buffer))
             distance_buffer.clear()
@@ -109,11 +124,14 @@ def read_sensor():
             print(f"WARNING Iteration took more than 25ms")
 
 
-        sleep(0.025) # 40 times a second
+        sleep(0.05) # 20 times a second
 
 
-sensor_thread = threading.Thread(target=read_sensor, args=())
+sensor_thread = threading.Thread(target=sensing, args=())
 sensor_thread.start()
 
 reporting_thread = threading.Thread(target=reporting, args=())
 reporting_thread.start()
+
+shooting_thread = threading.Thread(target=shooting, args=())
+shooting_thread.start()
