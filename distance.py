@@ -11,9 +11,10 @@ import json
 # Opening config file
 settings = json.load(open('config.json'))
 
+
 # Set up reporting to Losant
-distance_device = RESTReporter(settings["distanceSensorDeviceId"],settings["deviceKey"],settings["deviceSecret"])
-shooter_device = RESTReporter(settings["shooterDeviceId"],settings["deviceKey"],settings["deviceSecret"])
+distance_device = RESTReporter(settings.get("distanceSensorDeviceId"),settings.get("deviceKey"),settings.get("deviceSecret"))
+shooter_device = RESTReporter(settings.get("shooterDeviceId"),settings.get("deviceKey"),settings.get("deviceSecret"))
 
 # { device: DeviceReporter, states: [] }
 distance_reports = [] 
@@ -38,10 +39,10 @@ report_cv = threading.Condition()
 
 def init_matrices():
     # Current state [ [distance (mm), velocity (mm/ms)] ]
-    X = np.array( settings["x"] ) 
+    X = np.array( settings.get("x") ) 
 
     # Current uncertainty
-    P = np.array( settings["p"] )
+    P = np.array( settings.get("p") )
 
     return X,P
 
