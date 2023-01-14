@@ -6,14 +6,14 @@ from gpiozero.pins.pigpio import PiGPIOFactory
 from reporting import RESTReporter
 from bandshooter import BandShooter
 import numpy as np
-
-REPORT_FREQUENCY = 2000
-DISTANCE_SENSOR_DEVICE_ID = "63b027a5f4f9ead7f48d3bec"
-SHOOTER_DEVICE_ID = "63b0565c412b132160b22368"
+import json
+  
+# Opening config file
+settings = json.load(open('config.json'))
 
 # Set up reporting to Losant
-distance_device = RESTReporter(DISTANCE_SENSOR_DEVICE_ID)
-shooter_device = RESTReporter(SHOOTER_DEVICE_ID)
+distance_device = RESTReporter(settings["distanceSensorDeviceId"],settings["deviceKey"],settings["deviceSecret"])
+shooter_device = RESTReporter(settings["shooterDeviceId"],settings["deviceKey"],settings["deviceSecret"])
 
 # { device: DeviceReporter, states: [] }
 distance_reports = [] 
@@ -38,11 +38,10 @@ report_cv = threading.Condition()
 
 def init_matrices():
     # Current state [ [distance (mm), velocity (mm/ms)] ]
-    X = np.array( [[4000],[10]] ) 
+    X = np.array( settings["x"] ) 
 
     # Current uncertainty
-    P = np.array([ [100,0],
-                   [0,1000] ])
+    P = np.array( settings["p"] )
 
     return X,P
 
@@ -76,7 +75,7 @@ def sensing():
     # Monitor sensor
     while True:
         start_iteration = perf_counter_ns() / 1000000
-        duration = start_iteration - last_report if last_report != None else REPORT_FREQUENCY
+        duration = start_iteration - last_report if last_report != None else settings["reportFrequency"]
         
         # Get raw reading
         distance_mm_raw = int(dist_sensor.distance * 1000)
@@ -129,7 +128,7 @@ def sensing():
                 shooting_cv.notify_all()
 
 
-        if not idle or duration >= REPORT_FREQUENCY: 
+        if not idle or duration >= settings["reportFrequency"]: 
             # save every measurement during activity
             # save interval measurement during inactivity
             distance_reports_buffer.append({

@@ -2,12 +2,11 @@ from losantmqtt import Device
 from losantrest import Client
 from time import sleep
 
-DEVICE_KEY = "d3ecf944-b63a-4af4-b88d-26673acb8b40"
-DEVICE_SECRET = "2a8059ed6ddbec337e9913de0959b707b654ecb9c5a63e4e8933a4be85abe9ef"
+
 
 class Reporter:
 
-    def __init__(self,device_id):
+    def __init__(self,device_id, device_key, device_secret):
         self.device_id = device_id
         self.device = None
 
@@ -26,8 +25,8 @@ class Reporter:
 
 class MQTTReporter(Reporter):
 
-    def __init__(self,device_id):
-        self.device = Device(device_id, DEVICE_KEY, DEVICE_SECRET)
+    def __init__(self,device_id, device_key, device_secret):
+        self.device = Device(device_id, device_key, device_secret)
     
     def connect(self,blocking = False):
         self.device.connect(blocking)
@@ -50,13 +49,13 @@ class MQTTReporter(Reporter):
 
 class RESTReporter(Reporter):
 
-    def __init__(self,device_id):
+    def __init__(self,device_id, device_key, device_secret):
         self.device_id = device_id
         client = Client()
         creds = {
             'deviceId': device_id,
-            'key': DEVICE_KEY,
-            'secret': DEVICE_SECRET
+            'key': device_key,
+            'secret': device_secret
         }
         response = client.auth.authenticate_device(credentials=creds)
 
